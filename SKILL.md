@@ -1,6 +1,6 @@
 ---
 name: literature-review
-description: Conduct comprehensive, systematic literature reviews using multiple academic databases (PubMed, arXiv, bioRxiv, Semantic Scholar, etc.). This skill should be used when conducting systematic literature reviews, meta-analyses, research synthesis, or comprehensive literature searches across biomedical, scientific, and technical domains. Creates professionally formatted markdown documents and PDFs with verified citations in multiple citation styles (APA, Nature, Vancouver, etc.).
+description: Conduct comprehensive, systematic literature reviews using multiple academic databases (arXiv, Semantic Scholar, IEEE Xplore, ACM DL, OpenReview, Papers With Code, etc.). This skill should be used when conducting systematic literature reviews, research synthesis, or comprehensive literature searches across robotics, AI, machine learning, and related engineering domains. Creates professionally formatted markdown documents and PDFs with verified citations in multiple citation styles (APA, IEEE, etc.).
 allowed-tools: Read Write Edit Bash
 license: MIT license
 metadata:
@@ -13,69 +13,120 @@ metadata:
 
 Conduct systematic, comprehensive literature reviews following rigorous academic methodology. Search multiple literature databases, synthesize findings thematically, verify all citations for accuracy, and generate professional output documents in markdown and PDF formats.
 
-This skill integrates with multiple scientific skills for database access (gget, bioservices, datacommons-client) and provides specialized tools for citation verification, result aggregation, and document generation.
+This skill is focused on **robotics and AI** research, covering areas such as robot learning, motion planning, perception, manipulation, reinforcement learning, large language models, computer vision, and human-robot interaction.
 
 ## When to Use This Skill
 
 Use this skill when:
 - Conducting a systematic literature review for research or publication
-- Synthesizing current knowledge on a specific topic across multiple sources
-- Performing meta-analysis or scoping reviews
-- Writing the literature review section of a research paper or thesis
-- Investigating the state of the art in a research domain
+- Synthesizing current knowledge on a robotics or AI topic across multiple sources
+- Writing the related work or background section of a research paper or thesis
+- Investigating the state of the art in a robotics or AI domain
 - Identifying research gaps and future directions
+- Finding benchmark comparisons and baseline methods
 - Requiring verified citations and professional formatting
 
-## Visual Enhancement with Scientific Schematics
+## First Step: Identify if Simple Question or Full Review
+First, decide if this question requires a simple literature review or a full one.
+A simple review returns 1-10 references and is targeted on a very specific sub-part of a full literature review.
+A full literature review searches the web extensively and structures the result into multiple sub-sections.
 
-**⚠️ MANDATORY: Every literature review MUST include at least 1-2 AI-generated figures using the scientific-schematics skill.**
+## Core Workflow for Simple Question
 
-This is not optional. Literature reviews without visual elements are incomplete. Before finalizing any document:
-1. Generate at minimum ONE schematic or diagram (e.g., PRISMA flow diagram for systematic reviews)
-2. Prefer 2-3 figures for comprehensive reviews (search strategy flowchart, thematic synthesis diagram, conceptual framework)
+Use this for targeted questions like "give me references that support X" or "what are the most relevant papers on Y approach". Returns 3-10 high-quality references.
 
-**How to generate figures:**
-- Use the **scientific-schematics** skill to generate AI-powered publication-quality diagrams
-- Simply describe your desired diagram in natural language
-- Nano Banana Pro will automatically generate, review, and refine the schematic
+### Step 1: Extract Search Query
+Identify the core concept from the user's question or statement. Formulate a **single focused search string** (use AND/OR to combine 2-5 key terms). Do not run multiple queries per database.
 
-**How to generate schematics:**
-```bash
-python scripts/generate_schematic.py "your diagram description" -o figures/output.png
+### Step 2: Search Databases (one query each)
+Run the same query across 2-3 databases. For robotics and AI, default to:
+
+| Domain | Databases |
+|--------|-----------|
+| ML / Deep Learning | Semantic Scholar + arXiv |
+| Robotics / Control | Semantic Scholar + arXiv |
+| Computer Vision | Semantic Scholar + arXiv |
+| HRI / HCI | Semantic Scholar + ACM DL |
+
+**Semantic Scholar** (always include — free, no key needed):
+```
+GET https://api.semanticscholar.org/graph/v1/paper/search?query=<terms>&fields=title,authors,year,citationCount,externalIds,abstract&limit=10
 ```
 
-The AI will automatically:
-- Create publication-quality images with proper formatting
-- Review and refine through multiple iterations
-- Ensure accessibility (colorblind-friendly, high contrast)
-- Save outputs in the figures/ directory
+**arXiv** (primary preprint server for CS, ML, robotics):
+```
+GET https://export.arxiv.org/api/query?search_query=<terms>&max_results=10&sortBy=relevance
+```
 
-**When to add schematics:**
-- PRISMA flow diagrams for systematic reviews
-- Literature search strategy flowcharts
-- Thematic synthesis diagrams
-- Research gap visualization maps
-- Citation network diagrams
-- Conceptual framework illustrations
-- Any complex concept that benefits from visualization
+Relevant arXiv categories:
+- `cs.RO` — Robotics
+- `cs.LG` — Machine Learning
+- `cs.AI` — Artificial Intelligence
+- `cs.CV` — Computer Vision
+- `cs.NE` — Neural and Evolutionary Computing
+- `stat.ML` — Machine Learning (Statistics)
 
-For detailed guidance on creating schematics, refer to the scientific-schematics skill documentation.
+**ACM Digital Library** (for HRI, HCI, systems):
+```
+GET https://dl.acm.org/action/doSearch?query=<terms>&pageSize=10
+```
 
----
+### Rate Limit Error Handling
 
-## Core Workflow
+For each database request, check the HTTP response code before processing results:
+
+| Code | Meaning | Action |
+|------|---------|--------|
+| 200 | OK | Process results normally |
+| 429 | Rate limited | Log incident, skip to next database |
+| 403 | Forbidden | Log incident, skip to next database |
+| 5xx | Server error | Log incident, skip to next database |
+
+When a request is rejected, record the following internally and continue:
+```
+[SKIPPED] <DatabaseName>: HTTP <code> — <reason if provided>
+```
+
+Do **not** retry the request. Move on immediately to the next database.
+
+At the end of Step 3, include a **Search Summary** section before the references:
+
+```
+### Search Summary
+- Semantic Scholar: ✓ 10 results
+- arXiv:           ✗ HTTP 429 (rate limited) — skipped
+- ACM DL:          ✓ 6 results
+```
+
+If all databases were rejected, report this clearly and return no references rather than fabricating results.
+
+### Step 3: Select and Return References
+From the combined results, pick the **3-10 most relevant** papers. Prefer:
+- Higher citation counts (see thresholds in Full Review section)
+- Papers whose title/abstract directly address the user's question
+- Recent papers (last 5 years) unless the question asks for foundational work
+- Papers with available code (check Papers With Code)
+
+For each selected paper, provide:
+- Full citation (authors, year, title, venue)
+- DOI or arXiv ID
+- 1-sentence explanation of why it supports the statement/approach
+
+Do **not** run deduplication scripts, generate PDFs, or create flow diagrams for simple reviews.
+
+## Core Workflow for Full Review
 
 Literature reviews follow a structured, multi-phase workflow:
 
 ### Phase 1: Planning and Scoping
 
-1. **Define Research Question**: Use PICO framework (Population, Intervention, Comparison, Outcome) for clinical/biomedical reviews
-   - Example: "What is the efficacy of CRISPR-Cas9 (I) for treating sickle cell disease (P) compared to standard care (C)?"
+1. **Define Research Question**: Frame the question clearly around a system, method, or problem:
+   - Example: "What reinforcement learning approaches have been applied to dexterous robotic manipulation, and how do they compare in terms of sample efficiency and sim-to-real transfer?"
 
 2. **Establish Scope and Objectives**:
    - Define clear, specific research questions
-   - Determine review type (narrative, systematic, scoping, meta-analysis)
-   - Set boundaries (time period, geographic scope, study types)
+   - Determine review type (narrative, systematic, benchmark survey)
+   - Set boundaries (time period, task domain, evaluation metrics)
 
 3. **Develop Search Strategy**:
    - Identify 2-4 main concepts from research question
@@ -84,51 +135,50 @@ Literature reviews follow a structured, multi-phase workflow:
    - Select minimum 3 complementary databases
 
 4. **Set Inclusion/Exclusion Criteria**:
-   - Date range (e.g., last 10 years: 2015-2024)
-   - Language (typically English, or specify multilingual)
-   - Publication types (peer-reviewed, preprints, reviews)
-   - Study designs (RCTs, observational, in vitro, etc.)
+   - Date range (e.g., last 5 years: 2020-2025; robotics/AI moves fast)
+   - Language (typically English)
+   - Publication types (peer-reviewed conference papers, journals, preprints)
+   - Study types (empirical, theoretical, survey, benchmark)
    - Document all criteria clearly
 
 ### Phase 2: Systematic Literature Search
 
 1. **Multi-Database Search**:
 
-   Select databases appropriate for the domain:
+   **Primary Sources (always search):**
+   - Search arXiv via API — dominant preprint venue for CS/ML/robotics
+   - Search Semantic Scholar via API — 200M+ papers, cross-disciplinary
+   - Search IEEE Xplore — ICRA, IROS, RA-L, T-RO, and other robotics venues
+   - Search OpenReview — NeurIPS, ICML, ICLR, CoRL submissions and reviews
 
-   **Biomedical & Life Sciences:**
-   - Use `gget` skill: `gget search pubmed "search terms"` for PubMed/PMC
-   - Use `gget` skill: `gget search biorxiv "search terms"` for preprints
-   - Use `bioservices` skill for ChEMBL, KEGG, UniProt, etc.
-
-   **General Scientific Literature:**
-   - Search arXiv via direct API (preprints in physics, math, CS, q-bio)
-   - Search Semantic Scholar via API (200M+ papers, cross-disciplinary)
-   - Use Google Scholar for comprehensive coverage (manual or careful scraping)
-
-   **Specialized Databases:**
-   - Use `gget alphafold` for protein structures
-   - Use `gget cosmic` for cancer genomics
-   - Use `datacommons-client` for demographic/statistical data
-   - Use specialized databases as appropriate for the domain
+   **Secondary Sources (search when relevant):**
+   - ACM Digital Library — HRI, CHI, RSS proceedings
+   - Papers With Code — benchmark results and reproducibility info
+   - Google Scholar — broad coverage including workshop papers
 
 2. **Document Search Parameters**:
    ```markdown
    ## Search Strategy
 
-   ### Database: PubMed
-   - **Date searched**: 2024-10-25
-   - **Date range**: 2015-01-01 to 2024-10-25
+   ### Database: arXiv
+   - **Date searched**: 2025-04-08
+   - **Date range**: 2020-01-01 to 2025-04-08
    - **Search string**:
      ```
-     ("CRISPR"[Title] OR "Cas9"[Title])
-     AND ("sickle cell"[MeSH] OR "SCD"[Title/Abstract])
-     AND 2015:2024[Publication Date]
+     cat:cs.RO AND (ti:"dexterous manipulation" OR ti:"robotic hand")
+     AND (abs:"reinforcement learning" OR abs:"sim-to-real")
      ```
-   - **Results**: 247 articles
+   - **Status**: ✓ 183 articles  (or ✗ HTTP 429 — skipped)
    ```
 
-   Repeat for each database searched.
+   Repeat for each database searched. If a database returns HTTP 429, 403, or 5xx, log it as skipped and continue to the next. Do not retry. Include all skipped databases in a **Search Summary** table in the Methodology section:
+
+   | Database | Status | Results |
+   |----------|--------|---------|
+   | arXiv | ✓ | 183 |
+   | Semantic Scholar | ✓ | 247 |
+   | IEEE Xplore | ✗ HTTP 429 (rate limited) | — |
+   | OpenReview | ✓ | 94 |
 
 3. **Export and Aggregate Results**:
    - Export results in JSON format from each database
@@ -166,7 +216,7 @@ Literature reviews follow a structured, multi-phase workflow:
    - Document specific reasons for exclusion
    - Record final number of included studies
 
-5. **Create PRISMA Flow Diagram**:
+5. **Create Search Flow Diagram**:
    ```
    Initial search: n = X
    ├─ After deduplication: n = Y
@@ -178,24 +228,25 @@ Literature reviews follow a structured, multi-phase workflow:
 ### Phase 4: Data Extraction and Quality Assessment
 
 1. **Extract Key Data** from each included study:
-   - Study metadata (authors, year, journal, DOI)
-   - Study design and methods
-   - Sample size and population characteristics
-   - Key findings and results
+   - Paper metadata (authors, year, venue, DOI/arXiv ID)
+   - Problem formulation and task domain
+   - Method/architecture and key design choices
+   - Evaluation setup (benchmarks, baselines, metrics)
+   - Main results and reported performance numbers
    - Limitations noted by authors
-   - Funding sources and conflicts of interest
+   - Code/data availability
 
-2. **Assess Study Quality**:
-   - **For RCTs**: Use Cochrane Risk of Bias tool
-   - **For observational studies**: Use Newcastle-Ottawa Scale
-   - **For systematic reviews**: Use AMSTAR 2
-   - Rate each study: High, Moderate, Low, or Very Low quality
-   - Consider excluding very low-quality studies
+2. **Assess Paper Quality**:
+   - **Empirical papers**: Are baselines fair and up-to-date? Are ablations provided? Is evaluation reproducible?
+   - **Theoretical papers**: Are proofs complete? Are assumptions realistic?
+   - **Survey/benchmark papers**: Is coverage comprehensive? Are comparisons standardized?
+   - Note if code is publicly available (check Papers With Code)
+   - Rate each paper: Strong, Moderate, or Weak contribution
 
 3. **Organize by Themes**:
-   - Identify 3-5 major themes across studies
-   - Group studies by theme (studies may appear in multiple themes)
-   - Note patterns, consensus, and controversies
+   - Identify 3-5 major themes across papers
+   - Group papers by theme (papers may appear in multiple themes)
+   - Note patterns, consensus methods, and open controversies
 
 ### Phase 5: Synthesis and Analysis
 
@@ -204,35 +255,38 @@ Literature reviews follow a structured, multi-phase workflow:
    cp assets/review_template.md my_literature_review.md
    ```
 
-2. **Write Thematic Synthesis** (NOT study-by-study summaries):
+2. **Write Thematic Synthesis** (NOT paper-by-paper summaries):
    - Organize Results section by themes or research questions
-   - Synthesize findings across multiple studies within each theme
+   - Synthesize findings across multiple papers within each theme
    - Compare and contrast different approaches and results
    - Identify consensus areas and points of controversy
-   - Highlight the strongest evidence
+   - Highlight the strongest evidence and benchmark leaders
 
    Example structure:
    ```markdown
-   #### 3.3.1 Theme: CRISPR Delivery Methods
+   #### 3.3.1 Theme: Sim-to-Real Transfer for Manipulation
 
-   Multiple delivery approaches have been investigated for therapeutic
-   gene editing. Viral vectors (AAV) were used in 15 studies^1-15^ and
-   showed high transduction efficiency (65-85%) but raised immunogenicity
-   concerns^3,7,12^. In contrast, lipid nanoparticles demonstrated lower
-   efficiency (40-60%) but improved safety profiles^16-23^.
+   Domain randomization has become the dominant approach for sim-to-real
+   transfer in dexterous manipulation^1-8^. OpenAI Dactyl^1^ demonstrated
+   that randomizing physics parameters (friction, mass, damping) at training
+   time enables zero-shot transfer to real hardware for in-hand rotation.
+   Subsequent work showed that visual domain randomization^4,6^ further
+   reduces the reality gap for camera-based policies. In contrast, system
+   identification approaches^9-12^ achieve better sample efficiency on the
+   target system but require real-world data collection.
    ```
 
 3. **Critical Analysis**:
-   - Evaluate methodological strengths and limitations across studies
-   - Assess quality and consistency of evidence
-   - Identify knowledge gaps and methodological gaps
+   - Evaluate methodological strengths and limitations across papers
+   - Assess reproducibility and benchmark fairness
+   - Identify open problems and under-explored directions
    - Note areas requiring future research
 
 4. **Write Discussion**:
-   - Interpret findings in broader context
-   - Discuss clinical, practical, or research implications
+   - Interpret findings in broader research context
+   - Discuss practical implications for deployment or future research
    - Acknowledge limitations of the review itself
-   - Compare with previous reviews if applicable
+   - Compare with previous surveys if applicable
    - Propose specific future research directions
 
 ### Phase 6: Citation Verification
@@ -259,7 +313,7 @@ Literature reviews follow a structured, multi-phase workflow:
 
 3. **Format Citations Consistently**:
    - Choose one citation style and use throughout (see `references/citation_styles.md`)
-   - Common styles: APA, Nature, Vancouver, Chicago, IEEE
+   - Common styles for robotics/AI: IEEE, APA, ACM
    - Use verification script output to format citations correctly
    - Ensure in-text citations match reference list format
 
@@ -268,12 +322,12 @@ Literature reviews follow a structured, multi-phase workflow:
 1. **Generate PDF**:
    ```bash
    python scripts/generate_pdf.py my_literature_review.md \
-     --citation-style apa \
+     --citation-style ieee \
      --output my_review.pdf
    ```
 
    Options:
-   - `--citation-style`: apa, nature, chicago, vancouver, ieee
+   - `--citation-style`: apa, ieee, acm, chicago
    - `--no-toc`: Disable table of contents
    - `--no-numbers`: Disable section numbering
    - `--check-deps`: Check if pandoc/xelatex are installed
@@ -288,10 +342,10 @@ Literature reviews follow a structured, multi-phase workflow:
 3. **Quality Checklist**:
    - [ ] All DOIs verified with verify_citations.py
    - [ ] Citations formatted consistently
-   - [ ] PRISMA flow diagram included (for systematic reviews)
+   - [ ] Search flow diagram included
    - [ ] Search methodology fully documented
    - [ ] Inclusion/exclusion criteria clearly stated
-   - [ ] Results organized thematically (not study-by-study)
+   - [ ] Results organized thematically (not paper-by-paper)
    - [ ] Quality assessment completed
    - [ ] Limitations acknowledged
    - [ ] References complete and accurate
@@ -299,100 +353,87 @@ Literature reviews follow a structured, multi-phase workflow:
 
 ## Database-Specific Search Guidance
 
-### PubMed / PubMed Central
-
-Access via `gget` skill:
-```bash
-# Search PubMed
-gget search pubmed "CRISPR gene editing" -l 100
-
-# Search with filters
-# Use PubMed Advanced Search Builder to construct complex queries
-# Then execute via gget or direct Entrez API
-```
-
-**Search tips**:
-- Use MeSH terms: `"sickle cell disease"[MeSH]`
-- Field tags: `[Title]`, `[Title/Abstract]`, `[Author]`
-- Date filters: `2020:2024[Publication Date]`
-- Boolean operators: AND, OR, NOT
-- See MeSH browser: https://meshb.nlm.nih.gov/search
-
-### bioRxiv / medRxiv
-
-Access via `gget` skill:
-```bash
-gget search biorxiv "CRISPR sickle cell" -l 50
-```
-
-**Important considerations**:
-- Preprints are not peer-reviewed
-- Verify findings with caution
-- Check if preprint has been published (CrossRef)
-- Note preprint version and date
-
 ### arXiv
 
-Access via direct API or WebFetch:
-```python
-# Example search categories:
-# q-bio.QM (Quantitative Methods)
-# q-bio.GN (Genomics)
-# q-bio.MN (Molecular Networks)
-# cs.LG (Machine Learning)
-# stat.ML (Machine Learning Statistics)
-
-# Search format: category AND terms
-search_query = "cat:q-bio.QM AND ti:\"single cell sequencing\""
+Primary preprint server for CS, ML, and robotics. Access via direct API:
 ```
+GET https://export.arxiv.org/api/query?search_query=cat:cs.RO+AND+ti:manipulation&max_results=50&sortBy=relevance
+```
+
+Relevant categories:
+- `cs.RO` — Robotics
+- `cs.LG` — Machine Learning
+- `cs.AI` — Artificial Intelligence
+- `cs.CV` — Computer Vision and Pattern Recognition
+- `cs.NE` — Neural and Evolutionary Computing
+- `stat.ML` — Machine Learning
+
+**Search tips**:
+- `ti:` — title field, `abs:` — abstract field
+- Combine: `cat:cs.RO AND (ti:"motion planning" OR abs:"trajectory optimization")`
+- Date filter: `submittedDate:[20200101 TO 20250408]`
 
 ### Semantic Scholar
 
-Access via direct API (requires API key, or use free tier):
-- 200M+ papers across all fields
-- Excellent for cross-disciplinary searches
-- Provides citation graphs and paper recommendations
-- Use for finding highly influential papers
+Access via free API (200M+ papers, cross-disciplinary):
+```
+GET https://api.semanticscholar.org/graph/v1/paper/search?query=<terms>&fields=title,authors,year,citationCount,externalIds,abstract&limit=20
+```
 
-### Specialized Biomedical Databases
+**Search tips**:
+- Use `fields=` to request citation counts — essential for ranking by impact
+- Retrieve recommendations for a known key paper: `/paper/{id}/recommendations`
+- Use `/paper/{id}/citations` and `/paper/{id}/references` for citation chaining
 
-Use appropriate skills:
-- **ChEMBL**: `bioservices` skill for chemical bioactivity
-- **UniProt**: `gget` or `bioservices` skill for protein information
-- **KEGG**: `bioservices` skill for pathways and genes
-- **COSMIC**: `gget` skill for cancer mutations
-- **AlphaFold**: `gget alphafold` for protein structures
-- **PDB**: `gget` or direct API for experimental structures
+### IEEE Xplore
+
+Covers ICRA, IROS, RA-L, T-RO, and other top robotics/systems venues:
+```
+GET https://ieeexploreapi.ieee.org/api/v1/search/articles?querytext=<terms>&max_records=25&sort_order=desc&sort_field=article_citation_count
+```
+Requires a free API key from IEEE.
+
+### OpenReview
+
+Covers NeurIPS, ICML, ICLR, CoRL, and many ML/robotics workshops:
+```
+GET https://api2.openreview.net/notes?content.title=<terms>&details=replyCount&limit=25
+```
+
+**Notes**: Includes submitted, under-review, and rejected papers. Filter by `venueid` for specific conferences.
+
+### Papers With Code
+
+Find papers with open-source implementations and benchmark leaderboards:
+```
+GET https://paperswithcode.com/api/v1/papers/?q=<terms>&items_per_page=10
+```
+
+Use to verify code availability and compare results on standard benchmarks (e.g., MuJoCo locomotion, D4RL, Isaac Gym).
 
 ### Citation Chaining
 
 Expand search via citation networks:
 
 1. **Forward citations** (papers citing key papers):
-   - Use Google Scholar "Cited by"
-   - Use Semantic Scholar or OpenAlex APIs
-   - Identifies newer research building on seminal work
+   - Use Semantic Scholar `/paper/{id}/citations`
+   - Identifies newer work building on seminal methods
 
 2. **Backward citations** (references from key papers):
-   - Extract references from included papers
-   - Identify highly cited foundational work
-   - Find papers cited by multiple included studies
+   - Use Semantic Scholar `/paper/{id}/references`
+   - Identifies foundational and closely related work
 
 ## Citation Style Guide
 
 Detailed formatting guidelines are in `references/citation_styles.md`. Quick reference:
 
+### IEEE
+- In-text: Bracketed numbers [1], [2], [1]–[3]
+- Reference: J. D. Smith, M. L. Johnson, and K. R. Williams, "Title," in *Proc. ICRA*, 2023, pp. 301–318. doi: 10.xxx/yyy
+
 ### APA (7th Edition)
 - In-text: (Smith et al., 2023)
-- Reference: Smith, J. D., Johnson, M. L., & Williams, K. R. (2023). Title. *Journal*, *22*(4), 301-318. https://doi.org/10.xxx/yyy
-
-### Nature
-- In-text: Superscript numbers^1,2^
-- Reference: Smith, J. D., Johnson, M. L. & Williams, K. R. Title. *Nat. Rev. Drug Discov.* **22**, 301-318 (2023).
-
-### Vancouver
-- In-text: Superscript numbers^1,2^
-- Reference: Smith JD, Johnson ML, Williams KR. Title. Nat Rev Drug Discov. 2023;22(4):301-18.
+- Reference: Smith, J. D., Johnson, M. L., & Williams, K. R. (2023). Title. *Proc. ICRA*, 301–318. https://doi.org/10.xxx/yyy
 
 **Always verify citations** with verify_citations.py before finalizing.
 
@@ -413,102 +454,98 @@ Use citation counts to identify the most impactful papers:
 | 7+ years | 500+ citations | Seminal Work |
 | 7+ years | 1000+ citations | Foundational |
 
-#### Journal and Venue Tiers
+#### Conference and Journal Tiers
 
 Prioritize papers from higher-tier venues:
 
-- **Tier 1 (Always Prefer):** Nature, Science, Cell, NEJM, Lancet, JAMA, PNAS, Nature Medicine, Nature Biotechnology
-- **Tier 2 (Strong Preference):** High-impact specialized journals (IF>10), top conferences (NeurIPS, ICML for ML/AI)
-- **Tier 3 (Include When Relevant):** Respected specialized journals (IF 5-10)
-- **Tier 4 (Use Sparingly):** Lower-impact peer-reviewed venues
+- **Tier 1 (Always Prefer):** NeurIPS, ICML, ICLR, CVPR, ICRA, RSS, CoRL, Science Robotics, IJRR, T-RO, RA-L
+- **Tier 2 (Strong Preference):** IROS, ECCV, ICCV, AISTATS, UAI, AAAI, IJCAI, Autonomous Robots
+- **Tier 3 (Include When Relevant):** Workshops at Tier-1 venues, respected specialized journals
+- **Tier 4 (Use Sparingly):** Lower-impact peer-reviewed venues, non-peer-reviewed technical reports
 
 #### Author Reputation Assessment
 
 Prefer papers from:
-- **Senior researchers** with high h-index (>40 in established fields)
-- **Leading research groups** at recognized institutions (Harvard, Stanford, MIT, Oxford, etc.)
+- **Senior researchers** with high h-index (>30 in established subfields)
+- **Leading research groups** at recognized institutions and labs (DeepMind, OpenAI, CMU RI, MIT CSAIL, Stanford AI Lab, Berkeley AI Research, ETH Zurich, etc.)
 - **Authors with multiple Tier-1 publications** in the relevant field
-- **Researchers with recognized expertise** (awards, editorial positions, society fellows)
+- **Researchers with recognized expertise** (awards, editorial positions, distinguished speakers)
 
 #### Identifying Seminal Papers
 
 For any topic, identify foundational work by:
 1. **High citation count** (typically 500+ for papers 5+ years old)
-2. **Frequently cited by other included studies** (appears in many reference lists)
-3. **Published in Tier-1 venues** (Nature, Science, Cell family)
-4. **Written by field pioneers** (often cited as establishing concepts)
+2. **Frequently cited by other included papers** (appears in many reference lists)
+3. **Published in Tier-1 venues** (NeurIPS, ICRA, RSS, etc.)
+4. **Written by field pioneers** (often cited as establishing the concept or method)
 
 ## Best Practices
 
 ### Search Strategy
-1. **Use multiple databases** (minimum 3): Ensures comprehensive coverage
-2. **Include preprint servers**: Captures latest unpublished findings
+1. **Use multiple databases** (minimum 3): Ensures comprehensive coverage across venues
+2. **Include arXiv**: Captures latest preprints, often months ahead of conference proceedings
 3. **Document everything**: Search strings, dates, result counts for reproducibility
 4. **Test and refine**: Run pilot searches, review results, adjust search terms
-5. **Sort by citations**: When available, sort search results by citation count to surface influential work first
-
-### Screening and Selection
-1. **Use multiple databases** (minimum 3): Ensures comprehensive coverage
-2. **Include preprint servers**: Captures latest unpublished findings
-3. **Document everything**: Search strings, dates, result counts for reproducibility
-4. **Test and refine**: Run pilot searches, review results, adjust search terms
+5. **Sort by citations**: Surface influential work first; also check recent papers with fewer citations
 
 ### Screening and Selection
 1. **Use clear criteria**: Document inclusion/exclusion criteria before screening
 2. **Screen systematically**: Title → Abstract → Full text
-3. **Document exclusions**: Record reasons for excluding studies
-4. **Consider dual screening**: For systematic reviews, have two reviewers screen independently
+3. **Document exclusions**: Record reasons for excluding papers
+4. **Prioritize reproducible work**: Prefer papers with public code and standard benchmarks
 
 ### Synthesis
-1. **Organize thematically**: Group by themes, NOT by individual studies
-2. **Synthesize across studies**: Compare, contrast, identify patterns
-3. **Be critical**: Evaluate quality and consistency of evidence
-4. **Identify gaps**: Note what's missing or understudied
+1. **Organize thematically**: Group by themes or method families, NOT by individual papers
+2. **Synthesize across papers**: Compare, contrast, identify patterns and trends
+3. **Be critical**: Evaluate reproducibility, benchmark fairness, and real-world applicability
+4. **Identify gaps**: Note what's missing, understudied, or contradicted by recent work
 
 ### Quality and Reproducibility
-1. **Assess study quality**: Use appropriate quality assessment tools
+1. **Check code availability**: Use Papers With Code; note if results are reproducible
 2. **Verify all citations**: Run verify_citations.py script
-3. **Document methodology**: Provide enough detail for others to reproduce
-4. **Follow guidelines**: Use PRISMA for systematic reviews
+3. **Document methodology**: Provide enough detail for others to reproduce the search
+4. **Compare on shared benchmarks**: Prefer papers that evaluate on standard tasks
 
 ### Writing
 1. **Be objective**: Present evidence fairly, acknowledge limitations
 2. **Be systematic**: Follow structured template
-3. **Be specific**: Include numbers, statistics, effect sizes where available
+3. **Be specific**: Include performance numbers, benchmark names, and dataset sizes where available
 4. **Be clear**: Use clear headings, logical flow, thematic organization
 
 ## Common Pitfalls to Avoid
 
 1. **Single database search**: Misses relevant papers; always search multiple databases
 2. **No search documentation**: Makes review irreproducible; document all searches
-3. **Study-by-study summary**: Lacks synthesis; organize thematically instead
+3. **Paper-by-paper summary**: Lacks synthesis; organize thematically instead
 4. **Unverified citations**: Leads to errors; always run verify_citations.py
 5. **Too broad search**: Yields thousands of irrelevant results; refine with specific terms
 6. **Too narrow search**: Misses relevant papers; include synonyms and related terms
-7. **Ignoring preprints**: Misses latest findings; include bioRxiv, medRxiv, arXiv
-8. **No quality assessment**: Treats all evidence equally; assess and report quality
-9. **Publication bias**: Only positive results published; note potential bias
+7. **Ignoring arXiv**: Misses latest findings; robotics/AI moves faster than journal cycles
+8. **Ignoring benchmark context**: Treats all claims equally; compare on shared benchmarks
+9. **Recency bias**: Newer isn't always better; include seminal foundational work
 10. **Outdated search**: Field evolves rapidly; clearly state search date
 
 ## Example Workflow
 
-Complete workflow for a biomedical literature review:
+Complete workflow for a robotics/AI literature review:
 
 ```bash
 # 1. Create review document from template
-cp assets/review_template.md crispr_sickle_cell_review.md
+cp assets/review_template.md sim_to_real_rl_review.md
 
-# 2. Search multiple databases using appropriate skills
-# - Use gget skill for PubMed, bioRxiv
-# - Use direct API access for arXiv, Semantic Scholar
+# 2. Search multiple databases
+# - arXiv: cat:cs.RO AND (abs:"sim-to-real" OR abs:"domain randomization")
+# - Semantic Scholar: "sim-to-real transfer reinforcement learning robotics"
+# - IEEE Xplore: "sim-to-real" AND "robot"
+# - OpenReview: search CoRL and ICML venues
 # - Export results in JSON format
 
 # 3. Aggregate and process results
 python scripts/search_databases.py combined_results.json \
   --deduplicate \
   --rank citations \
-  --year-start 2015 \
-  --year-end 2024 \
+  --year-start 2018 \
+  --year-end 2025 \
   --format markdown \
   --output search_results.md \
   --summary
@@ -516,7 +553,7 @@ python scripts/search_databases.py combined_results.json \
 # 4. Screen results and extract data
 # - Manually screen titles, abstracts, full texts
 # - Extract key data into the review document
-# - Organize by themes
+# - Organize by themes (domain randomization, system ID, adaptive methods, etc.)
 
 # 5. Write the review following template structure
 # - Introduction with clear objectives
@@ -526,40 +563,29 @@ python scripts/search_databases.py combined_results.json \
 # - Clear conclusions
 
 # 6. Verify all citations
-python scripts/verify_citations.py crispr_sickle_cell_review.md
+python scripts/verify_citations.py sim_to_real_rl_review.md
 
 # Review the citation report
-cat crispr_sickle_cell_review_citation_report.json
+cat sim_to_real_rl_review_citation_report.json
 
 # Fix any failed citations and re-verify
-python scripts/verify_citations.py crispr_sickle_cell_review.md
+python scripts/verify_citations.py sim_to_real_rl_review.md
 
 # 7. Generate professional PDF
-python scripts/generate_pdf.py crispr_sickle_cell_review.md \
-  --citation-style nature \
-  --output crispr_sickle_cell_review.pdf
+python scripts/generate_pdf.py sim_to_real_rl_review.md \
+  --citation-style ieee \
+  --output sim_to_real_rl_review.pdf
 
 # 8. Review final PDF and markdown outputs
 ```
 
 ## Integration with Other Skills
 
-This skill works seamlessly with other scientific skills:
-
-### Database Access Skills
-- **gget**: PubMed, bioRxiv, COSMIC, AlphaFold, Ensembl, UniProt
-- **bioservices**: ChEMBL, KEGG, Reactome, UniProt, PubChem
-- **datacommons-client**: Demographics, economics, health statistics
-
-### Analysis Skills
-- **pydeseq2**: RNA-seq differential expression (for methods sections)
-- **scanpy**: Single-cell analysis (for methods sections)
-- **anndata**: Single-cell data (for methods sections)
-- **biopython**: Sequence analysis (for background sections)
+This skill works with other scientific and writing skills:
 
 ### Visualization Skills
-- **matplotlib**: Generate figures and plots for review
-- **seaborn**: Statistical visualizations
+- **matplotlib**: Generate comparison figures, benchmark plots
+- **seaborn**: Statistical visualizations for performance comparisons
 
 ### Writing Skills
 - **brand-guidelines**: Apply institutional branding to PDF
@@ -575,7 +601,7 @@ This skill works seamlessly with other scientific skills:
 - `scripts/search_databases.py`: Process, deduplicate, and format search results
 
 **References:**
-- `references/citation_styles.md`: Detailed citation formatting guide (APA, Nature, Vancouver, Chicago, IEEE)
+- `references/citation_styles.md`: Detailed citation formatting guide (APA, IEEE, ACM)
 - `references/database_strategies.md`: Comprehensive database search strategies
 
 **Assets:**
@@ -583,20 +609,24 @@ This skill works seamlessly with other scientific skills:
 
 ### External Resources
 
-**Guidelines:**
-- PRISMA (Systematic Reviews): http://www.prisma-statement.org/
-- Cochrane Handbook: https://training.cochrane.org/handbook
-- AMSTAR 2 (Review Quality): https://amstar.ca/
+**Databases:**
+- arXiv CS: https://arxiv.org/search/cs
+- Semantic Scholar: https://www.semanticscholar.org/
+- IEEE Xplore: https://ieeexplore.ieee.org/
+- OpenReview: https://openreview.net/
+- Papers With Code: https://paperswithcode.com/
+- ACM Digital Library: https://dl.acm.org/
 
-**Tools:**
-- MeSH Browser: https://meshb.nlm.nih.gov/search
-- PubMed Advanced Search: https://pubmed.ncbi.nlm.nih.gov/advanced/
-- Boolean Search Guide: https://www.ncbi.nlm.nih.gov/books/NBK3827/
+**Top Venue Proceedings:**
+- ICRA: https://ieeexplore.ieee.org/xpl/conhome/1000639/all-proceedings
+- RSS: https://roboticsconference.org/
+- CoRL: https://www.corl.org/
+- NeurIPS: https://papers.nips.cc/
+- ICML / ICLR: https://openreview.net/
 
 **Citation Styles:**
+- IEEE Style: https://ieeeauthorcenter.ieee.org/wp-content/uploads/IEEE-Reference-Guide.pdf
 - APA Style: https://apastyle.apa.org/
-- Nature Portfolio: https://www.nature.com/nature-portfolio/editorial-policies/reporting-standards
-- NLM/Vancouver: https://www.nlm.nih.gov/bsd/uniform_requirements.html
 
 ## Dependencies
 
@@ -625,13 +655,12 @@ python scripts/generate_pdf.py --check-deps
 
 This literature-review skill provides:
 
-1. **Systematic methodology** following academic best practices
-2. **Multi-database integration** via existing scientific skills
+1. **Systematic methodology** following academic best practices for robotics and AI
+2. **Multi-database integration** covering arXiv, Semantic Scholar, IEEE Xplore, OpenReview, and Papers With Code
 3. **Citation verification** ensuring accuracy and credibility
 4. **Professional output** in markdown and PDF formats
 5. **Comprehensive guidance** covering the entire review process
-6. **Quality assurance** with verification and validation tools
+6. **Quality assurance** with reproducibility checks and benchmark-aware evaluation
 7. **Reproducibility** through detailed documentation requirements
 
-Conduct thorough, rigorous literature reviews that meet academic standards and provide comprehensive synthesis of current knowledge in any domain.
-
+Conduct thorough, rigorous literature reviews that meet the standards of top robotics and AI venues.
