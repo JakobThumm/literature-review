@@ -62,15 +62,26 @@ Relevant categories:
 
 #### Semantic Scholar
 
-Access via free API (200M+ papers, cross-disciplinary):
+Use the **`semantic-scholar` MCP server** when available (preferred over raw HTTP):
+
+| MCP Tool | Use |
+|----------|-----|
+| `search_papers` | Keyword search with year range, field-of-study, and open-access filters |
+| `get_paper` | Full details by Semantic Scholar ID, DOI, or arXiv ID |
+| `get_citations` | Forward citations (papers citing a key paper) or backward references |
+| `get_author` | Author profile, h-index, and affiliation |
+| `search_by_author` | Find an author by name and list their top papers |
+
+**Fallback** (if MCP server is not configured):
 ```
 GET https://api.semanticscholar.org/graph/v1/paper/search?query=<terms>&fields=title,authors,year,citationCount,externalIds,abstract&limit=20
 ```
 
 **Search tips**:
-- Use `fields=` to request citation counts — essential for ranking by impact
-- Retrieve recommendations for a known key paper: `/paper/{id}/recommendations`
-- Use `/paper/{id}/citations` and `/paper/{id}/references` for citation chaining
+- Use `search_papers` with `year_start`/`year_end` filters to scope recency
+- Use `get_citations` with `direction="citations"` for forward chaining and `direction="references"` for backward chaining
+- Use `get_author` or `search_by_author` to verify author reputation and h-index instead of manual lookup
+- When using the raw HTTP fallback, use `fields=` to request citation counts — essential for ranking by impact
 
 #### IEEE Xplore
 
@@ -107,10 +118,10 @@ Use to verify code availability and compare results on standard benchmarks (e.g.
 
 #### Citation Chaining
 
-Expand search via citation networks using Semantic Scholar:
+Expand search via citation networks using the `get_citations` MCP tool (or raw HTTP fallback):
 
-1. **Forward citations** (papers citing key papers): `/paper/{id}/citations` — finds newer work building on seminal methods
-2. **Backward citations** (references from key papers): `/paper/{id}/references` — finds foundational and closely related work
+1. **Forward citations** (papers citing key papers): `get_citations(paper_id, direction="citations")` — finds newer work building on seminal methods
+2. **Backward citations** (references from key papers): `get_citations(paper_id, direction="references")` — finds foundational and closely related work
 
 ### Rate Limit Error Handling
 
@@ -154,7 +165,7 @@ Do **not** retry the request. Move on immediately to the next database. Always i
 
 #### Author Reputation
 
-Prefer papers from senior researchers with high h-index (>30), leading labs (DeepMind, OpenAI, CMU RI, MIT CSAIL, Stanford AI Lab, Berkeley AI Research, ETH Zurich, etc.), and authors with multiple Tier-1 publications.
+Prefer papers from senior researchers with high h-index (>30), leading labs (DeepMind, OpenAI, CMU RI, MIT CSAIL, Stanford AI Lab, Berkeley AI Research, ETH Zurich, etc.), and authors with multiple Tier-1 publications. Use `search_by_author` or `get_author` (MCP) to quickly verify h-index and affiliation for key authors.
 
 #### Identifying Seminal Papers
 
@@ -242,6 +253,7 @@ Literature reviews follow a structured, multi-phase workflow:
 
 1. **Define Research Question**: Frame the question clearly around a system, method, or problem:
    - Example: "What reinforcement learning approaches have been applied to dexterous robotic manipulation, and how do they compare in terms of sample efficiency and sim-to-real transfer?"
+   - Confirm the research question with the user before proceeding.
 
 2. **Establish Scope and Objectives**:
    - Define clear, specific research questions
@@ -378,6 +390,10 @@ Literature reviews follow a structured, multi-phase workflow:
    ```
 
 3. **Critical Analysis**:
+   - If a base paper (most likely the paper that we are writing right now) is given to compare against, compare each method against the base paper. 
+   - Where are similarities to the base paper?
+   - What are key differences to the base paper?
+   - What are shortcomings of the method in comparison to the base paper?
    - Evaluate methodological strengths and limitations across papers
    - Assess reproducibility and benchmark fairness
    - Identify open problems and under-explored directions
